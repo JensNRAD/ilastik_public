@@ -22,6 +22,7 @@ from volumina.api import LazyflowSource, NormalizingSource, GrayscaleLayer, RGBA
                          LayerStackModel, VolumeEditor
 from volumina.utility import ShortcutManager
 from volumina.adaptors import Op5ifyer
+# from volumina.interpreter import ClickReportingInterpreterMRI
 from volumina.interpreter import ClickReportingInterpreter
 
 #ilastik
@@ -164,7 +165,8 @@ class LayerViewerGui(QWidget):
         for multiLayerSlot in self.observedSlots:
             for j, slot in enumerate(multiLayerSlot):
                 if slot.ready() and slot.meta.axistags is not None:
-                    layer = self.createStandardLayerFromSlot(slot)
+#                    layer = self.createStandardLayerFromSlot(slot)
+                    layer = self.createStandardLayerFromSlotMRI(slot)
                     
                     # Name the layer after the slot name.
                     if isinstance( multiLayerSlot.getRealOperator(), Op1ToMulti ):
@@ -196,6 +198,90 @@ class LayerViewerGui(QWidget):
     def generateAlphaModulatedLayersFromChannels(self, slot):
         # TODO
         assert False
+
+    @classmethod
+    def createStandardLayerFromSlotMRI(cls, slot, lastChannelIsAlpha=False):
+        def getRange(meta):
+            if 'drange' in meta:
+                return meta.drange
+            if meta.dtype == numpy.uint8:
+                return (0, 255)
+            else:
+                # If we don't know the range of the data, create a layer that is auto-normalized.
+                # See volumina.pixelpipeline.datasources for details.
+                #
+                # Even in the case of integer data, which has more than 255 possible values,
+                # (like uint16), it seems reasonable to use this setting as default
+                return 'autoPercentiles'
+
+        # Examine channel dimension to determine Grayscale vs. RGB
+        shape = slot.meta.shape
+        print 'Shape', shape
+        print "slot %s has shape = %r, axistags = %r" % (slot.name, slot.meta.shape, slot.meta.axistags)
+        normalize = getRange(slot.meta)
+        try:
+            channelAxisIndex = slot.meta.axistags.index('c')
+            #assert channelAxisIndex < len(slot.meta.axistags), \
+            #    "slot %s has shape = %r, axistags = %r, but no channel dimension" \
+            #    % (slot.name, slot.meta.shape, slot.meta.axistags)
+            numChannels = shape[channelAxisIndex]
+        except:
+            numChannels = 1
+
+        if numChannels > 4:
+            print 'Found %s number of channels' %numChannels
+            source = LazyflowSource(slot)
+            normSource = NormalizingSource( source, bounds=normalize )
+            return GrayscaleLayer(normSource)
+            
+            '''
+        if numChannels == 4:
+            lastChannelIsAlpha = True
+            
+        if lastChannelIsAlpha:
+            assert numChannels <= 4, "Can't display a standard layer with more than four channels (with alpha).  Your image has {} channels.".format(numChannels)
+        else:
+            assert numChannels <= 3, "Can't display a standard layer with more than three channels (with no alpha).  Your image has {} channels.".format(numChannels)
+            '''
+        if numChannels == 1:
+            assert not lastChannelIsAlpha, "Can't have an alpha channel if there is no color channel"
+            source = LazyflowSource(slot)
+            normSource = NormalizingSource( source, bounds=normalize )
+            return GrayscaleLayer(normSource)
+
+        assert numChannels > 2 or (numChannels == 2 and not lastChannelIsAlpha), \
+            "Unhandled combination of channels.  numChannels={}, lastChannelIsAlpha={}, axistags={}".format( numChannels, lastChannelIsAlpha, slot.meta.axistags )
+        redProvider = OpSingleChannelSelector(graph=slot.graph)
+        redProvider.Input.connect(slot)
+        redProvider.Index.setValue( 0 )
+        redSource = LazyflowSource( redProvider.Output )
+        redNormSource = NormalizingSource( redSource, bounds=normalize )
+
+        greenProvider = OpSingleChannelSelector(graph=slot.graph)
+        greenProvider.Input.connect(slot)
+        greenProvider.Index.setValue( 1 )
+        greenSource = LazyflowSource( greenProvider.Output )
+        greenNormSource = NormalizingSource( greenSource, bounds=normalize )
+
+        blueNormSource = None
+        if numChannels > 3 or (numChannels == 3 and not lastChannelIsAlpha):
+            blueProvider = OpSingleChannelSelector(graph=slot.graph)
+            blueProvider.Input.connect(slot)
+            blueProvider.Index.setValue( 2 )
+            blueSource = LazyflowSource( blueProvider.Output )
+            blueNormSource = NormalizingSource( blueSource, bounds=normalize )
+
+        alphaNormSource = None
+        if lastChannelIsAlpha:
+            alphaProvider = OpSingleChannelSelector(graph=slot.graph)
+            alphaProvider.Input.connect(slot)
+            alphaProvider.Index.setValue( numChannels-1 )
+            alphaSource = LazyflowSource( alphaProvider.Output )
+            alphaNormSource = NormalizingSource( alphaSource, bounds=normalize )
+
+        layer = RGBALayer( red=redNormSource, green=greenNormSource, blue=blueNormSource, alpha=alphaNormSource )
+        return layer
+
 
     @classmethod
     def createStandardLayerFromSlot(cls, slot, lastChannelIsAlpha=False):
@@ -382,10 +468,12 @@ class LayerViewerGui(QWidget):
                     # Disconnect it so it can be garbage collected.
                     op5.input.disconnect()
 
-        if newDataShape is not None:
+        # JPK removed this section to be able to switch between channels  
+        # if newDataShape is not None:
             # For now, this base class combines multi-channel images into a single layer,
             # So, we want the volume editor to behave as though there is only one channel
-            newDataShape = newDataShape[:-1] + (1,)
+
+            # newDataShape = newDataShape[:-1] + (1,)
         return newDataShape
 
     @traceLogged(traceLogger)
@@ -547,7 +635,9 @@ class LayerViewerGui(QWidget):
         self.editor = VolumeEditor(self.layerstack, crosshair=crosshair)
 
         # Replace the editor's navigation interpreter with one that has extra functionality
-        self.clickReporter = ClickReportingInterpreter( self.editor.navInterpret, self.editor.posModel )
+        self.clickReporter = ClickReportingInterpreter( self.editor.navInterpret, self.editor.posModel ) 
+#        self.clickReporter = ClickReportingInterpreterMRI( self.editor.navInterpret, self.editor.posModel , self.layerstack)
+
         self.editor.setNavigationInterpreter( self.clickReporter )
         self.clickReporter.rightClickReceived.connect( self._handleEditorRightClick )
         self.clickReporter.leftClickReceived.connect( self._handleEditorLeftClick )

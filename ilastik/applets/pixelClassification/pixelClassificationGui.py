@@ -264,7 +264,8 @@ class PixelClassificationGui(LabelingGui):
         # Add the raw data last (on the bottom)
         inputDataSlot = self.topLevelOperatorView.InputImages
         if inputDataSlot.ready():
-            inputLayer = self.createStandardLayerFromSlot( inputDataSlot )
+            inputLayer = self.createStandardLayerFromSlotMRI( inputDataSlot )
+#            inputLayer = self.createStandardLayerFromSlot( inputDataSlot )
             inputLayer.name = "Input Data"
             inputLayer.visible = True
             inputLayer.opacity = 1.0

@@ -696,9 +696,9 @@ class IlastikShell( QMainWindow ):
         fileSelected = False
         while not fileSelected:
             projectFilePath = QFileDialog.getSaveFileName(
-               self, caption, defaultPath, "Ilastik project files (*.ilp)",
-               options=QFileDialog.Options(QFileDialog.DontUseNativeDialog))
-            
+               self, caption, defaultPath, "Ilastik project files (*.ilp)")#,
+#               options=QFileDialog.Options(QFileDialog.DontUseNativeDialog))
+# changed option to store files on different harddrive
             # If the user cancelled, stop now
             if projectFilePath.isNull():
                 return None

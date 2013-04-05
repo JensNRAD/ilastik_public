@@ -160,7 +160,7 @@ class FeatureSelectionGui(LayerViewerGui):
         layers = []
        
         if inputSlot.ready(): 
-            rawLayer = self.createStandardLayerFromSlot(inputSlot)
+            rawLayer = self.createStandardLayerFromSlotMRI(inputSlot)
             rawLayer.visible = True
             rawLayer.opacity = 1.0
             rawLayer.name = "raw data" 
@@ -210,7 +210,7 @@ class FeatureSelectionGui(LayerViewerGui):
             opSubRegion.Start.setValue( tuple(start) )
             opSubRegion.Stop.setValue( tuple(stop) )
             
-            featureLayer = self.createStandardLayerFromSlot( opSubRegion.Output )
+            featureLayer = self.createStandardLayerFromSlotMRI( opSubRegion.Output )
             featureLayer.visible = False
             featureLayer.opacity = 1.0
             featureLayer.name = featureName
